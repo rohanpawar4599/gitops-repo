@@ -51,6 +51,7 @@ jobs:
     name: Build, Scan and Push Docker Image
     runs-on: ubuntu-latest
     needs: helm-lint
+    if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
 
     steps:
       - name: Checkout Code
