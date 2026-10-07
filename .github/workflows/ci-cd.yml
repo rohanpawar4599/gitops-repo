@@ -1,12 +1,14 @@
-name: CI/CD Pipeline
+name: CI Pipeline
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-
   test:
     name: Run Application Tests
     runs-on: ubuntu-latest
@@ -29,7 +31,6 @@ jobs:
         run: |
           python -m pytest -v
 
-
   helm-lint:
     name: Validate Helm Chart
     runs-on: ubuntu-latest
@@ -44,14 +45,12 @@ jobs:
 
       - name: Run Helm Lint
         run: |
-          helm lint ./helm/devops-app
-
+          helm lint ./my-gitops-app
 
   build-and-push:
     name: Build, Scan and Push Docker Image
     runs-on: ubuntu-latest
     needs: helm-lint
-    if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
 
     steps:
       - name: Checkout Code
@@ -66,41 +65,23 @@ jobs:
       - name: Build Docker Image
         run: |
           docker build \
-            -t ${{ secrets.DOCKER_USERNAME }}/devops-app:${{ github.sha }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/gitops-demo-app:${{ github.sha }} \
+            -t ${{ secrets.DOCKER_USERNAME }}/gitops-demo-app:v1.0.0 \
             .
 
       - name: Scan Docker Image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ secrets.DOCKER_USERNAME }}/devops-app:${{ github.sha }}'
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/gitops-demo-app:${{ github.sha }}'
           format: 'table'
           exit-code: '0'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
-      - name: Push Docker Image
+      - name: Push SHA Image
         run: |
-          docker push \
-            ${{ secrets.DOCKER_USERNAME }}/devops-app:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/gitops-demo-app:${{ github.sha }}
 
-
-  deploy:
-    name: Deploy to Minikube with Helm
-    runs-on: self-hosted
-    needs: build-and-push
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Verify Kubernetes Cluster
+      - name: Push Version Image
         run: |
-          kubectl get nodes
-          helm version
-
-      - name: Deploy Application with Helm
-        run: |
-          helm upgrade --install devops-app ./helm/devops-app \
-            --set image.repository=${{ secrets.DOCKER_USERNAME }}/devops-app \
-            --set image.tag=${{ github.sha }} \
-            --wait
+          docker push ${{ secrets.DOCKER_USERNAME }}/gitops-demo-app:v1.0.0
